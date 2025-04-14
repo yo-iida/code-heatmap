@@ -164,5 +164,5 @@ fi
 echo "  ]" >> "$METRICS_FILE"
 echo "}" >> "$METRICS_FILE"
 
-# 整形されたJSONを出力
-cat "$METRICS_FILE" | jq '.'
+# 整形されたJSONをoutput.jsonに出力
+cat "$METRICS_FILE" | jq '.' > output.json
