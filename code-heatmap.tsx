@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Treemap, ResponsiveContainer, Tooltip, TooltipProps } from 'recharts';
 import { ArrowLeft } from 'lucide-react';
 
@@ -7,7 +7,7 @@ interface FileNode {
   name: string;
   loc?: number;
   changes?: number;
-  bugs?: number;
+  authors?: number;
   children?: FileNode[];
   [key: string]: any; // 動的なプロパティアクセスを許可
 }
@@ -16,7 +16,7 @@ interface TreemapNode {
   name: string;
   loc: number;
   changes: number;
-  bugs: number;
+  authors: number;
   fill: string;
   hasChildren: boolean;
 }
@@ -36,154 +36,34 @@ interface TreemapContentProps {
 }
 
 export default function CodeHeatmap() {
-  // より詳細な階層データを用意
-  const fullData = {
-    name: 'root',
-    children: [
-      {
-        name: 'src',
-        children: [
-          {
-            name: 'components',
-            children: [
-              {
-                name: 'ui',
-                children: [
-                  { name: 'Button.jsx', loc: 250, changes: 38, bugs: 5 },
-                  { name: 'Card.jsx', loc: 180, changes: 12, bugs: 1 },
-                  { name: 'Input.jsx', loc: 220, changes: 25, bugs: 3 },
-                  { name: 'Modal.jsx', loc: 310, changes: 42, bugs: 7 },
-                  { name: 'Table.jsx', loc: 420, changes: 18, bugs: 2 },
-                ]
-              },
-              {
-                name: 'layout',
-                children: [
-                  { name: 'Header.jsx', loc: 150, changes: 8, bugs: 0 },
-                  { name: 'Footer.jsx', loc: 120, changes: 5, bugs: 0 },
-                  { name: 'Sidebar.jsx', loc: 280, changes: 22, bugs: 4 },
-                  { name: 'Layout.jsx', loc: 90, changes: 15, bugs: 1 },
-                ]
-              },
-              {
-                name: 'forms',
-                children: [
-                  { name: 'LoginForm.jsx', loc: 180, changes: 28, bugs: 3 },
-                  { name: 'RegisterForm.jsx', loc: 220, changes: 32, bugs: 5 },
-                  { name: 'ContactForm.jsx', loc: 150, changes: 10, bugs: 0 },
-                ]
-              }
-            ]
-          },
-          {
-            name: 'utils',
-            children: [
-              { name: 'api.js', loc: 320, changes: 45, bugs: 8 },
-              { name: 'format.js', loc: 150, changes: 8, bugs: 0 },
-              { name: 'validation.js', loc: 280, changes: 12, bugs: 2 },
-              { name: 'helpers.js', loc: 220, changes: 7, bugs: 1 },
-            ]
-          },
-          {
-            name: 'pages',
-            children: [
-              {
-                name: 'auth',
-                children: [
-                  { name: 'Login.jsx', loc: 120, changes: 18, bugs: 2 },
-                  { name: 'Register.jsx', loc: 140, changes: 22, bugs: 3 },
-                  { name: 'ForgotPassword.jsx', loc: 90, changes: 8, bugs: 0 },
-                ]
-              },
-              {
-                name: 'dashboard',
-                children: [
-                  { name: 'Overview.jsx', loc: 280, changes: 35, bugs: 4 },
-                  { name: 'Analytics.jsx', loc: 320, changes: 40, bugs: 6 },
-                  { name: 'Settings.jsx', loc: 250, changes: 28, bugs: 3 },
-                ]
-              },
-              { name: 'Home.jsx', loc: 180, changes: 25, bugs: 2 },
-              { name: 'About.jsx', loc: 90, changes: 5, bugs: 0 },
-              { name: 'Contact.jsx', loc: 110, changes: 8, bugs: 1 },
-            ]
-          },
-          {
-            name: 'hooks',
-            children: [
-              { name: 'useAuth.js', loc: 150, changes: 32, bugs: 5 },
-              { name: 'useFetch.js', loc: 180, changes: 28, bugs: 4 },
-              { name: 'useForm.js', loc: 120, changes: 15, bugs: 2 },
-            ]
-          },
-          {
-            name: 'context',
-            children: [
-              { name: 'AuthContext.js', loc: 220, changes: 38, bugs: 6 },
-              { name: 'ThemeContext.js', loc: 140, changes: 12, bugs: 1 },
-              { name: 'AppContext.js', loc: 180, changes: 22, bugs: 3 },
-            ]
-          },
-        ],
-      },
-      {
-        name: 'tests',
-        children: [
-          {
-            name: 'unit',
-            children: [
-              {
-                name: 'components',
-                children: [
-                  { name: 'Button.test.js', loc: 120, changes: 8, bugs: 0 },
-                  { name: 'Card.test.js', loc: 90, changes: 5, bugs: 0 },
-                  { name: 'Input.test.js', loc: 110, changes: 7, bugs: 0 },
-                ]
-              },
-              {
-                name: 'utils',
-                children: [
-                  { name: 'api.test.js', loc: 150, changes: 12, bugs: 1 },
-                  { name: 'format.test.js', loc: 80, changes: 4, bugs: 0 },
-                  { name: 'validation.test.js', loc: 130, changes: 8, bugs: 0 },
-                ]
-              },
-            ]
-          },
-          {
-            name: 'integration',
-            children: [
-              { name: 'auth.test.js', loc: 220, changes: 18, bugs: 2 },
-              { name: 'dashboard.test.js', loc: 280, changes: 22, bugs: 3 },
-              { name: 'forms.test.js', loc: 190, changes: 12, bugs: 1 },
-            ]
-          },
-        ],
-      },
-      {
-        name: 'config',
-        children: [
-          { name: 'webpack.config.js', loc: 180, changes: 28, bugs: 4 },
-          { name: 'jest.config.js', loc: 90, changes: 12, bugs: 1 },
-          { name: 'babel.config.js', loc: 70, changes: 8, bugs: 0 },
-          { name: '.eslintrc.js', loc: 120, changes: 15, bugs: 2 },
-        ]
-      },
-      {
-        name: 'docs',
-        children: [
-          { name: 'api.md', loc: 350, changes: 8, bugs: 0 },
-          { name: 'components.md', loc: 420, changes: 12, bugs: 0 },
-          { name: 'getting-started.md', loc: 280, changes: 5, bugs: 0 },
-          { name: 'deployment.md', loc: 220, changes: 4, bugs: 0 },
-        ]
-      },
-    ],
-  };
+  // データの読み込み状態を管理
+  const [fullData, setFullData] = useState<FileNode | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // output.jsonからデータを読み込む
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch('/output.json');
+        if (!response.ok) {
+          throw new Error('データの読み込みに失敗しました');
+        }
+        const data = await response.json();
+        setFullData(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   // 現在の表示データと階層パスを管理するstate
   const [currentPath, setCurrentPath] = useState<string[]>([]);
-  const [colorMetric, setColorMetric] = useState<'changes' | 'bugs'>('changes');
+  const [colorMetric, setColorMetric] = useState<'changes' | 'authors'>('changes');
 
   // 指標に基づいて色を決定
   const getColor = useCallback((value: number, metric: string = colorMetric) => {
@@ -191,24 +71,26 @@ export default function CodeHeatmap() {
     
     // 変更頻度に基づく色
     if (metricToUse === 'changes') {
-      if (value <= 10) return '#c8e6c9'; // 低頻度 - 薄い緑
-      if (value <= 20) return '#81c784'; // 中低頻度 - 緑
-      if (value <= 30) return '#ffb74d'; // 中頻度 - オレンジ
-      if (value <= 40) return '#ff8a65'; // 中高頻度 - 薄い赤
-      return '#e57373';                   // 高頻度 - 赤
+      if (value <= 1) return '#c8e6c9'; // 低頻度 - 薄い緑
+      if (value <= 2) return '#81c784'; // 中低頻度 - 緑
+      if (value <= 3) return '#ffb74d'; // 中頻度 - オレンジ
+      if (value <= 4) return '#ff8a65'; // 中高頻度 - 薄い赤
+      return '#e57373';                 // 高頻度 - 赤
     } 
-    // バグ数に基づく色
-    else if (metricToUse === 'bugs') {
-      if (value === 0) return '#bbdefb'; // バグなし - 薄い青
-      if (value <= 2) return '#90caf9'; // 少ないバグ - 青
-      if (value <= 4) return '#ffb74d'; // 中程度 - オレンジ
-      if (value <= 6) return '#ff8a65'; // 多め - 薄い赤
-      return '#e57373';                 // 多数 - 赤
+    // 作者数に基づく色
+    else if (metricToUse === 'authors') {
+      if (value === 1) return '#bbdefb'; // 1人 - 薄い青
+      if (value <= 2) return '#90caf9'; // 2人 - 青
+      if (value <= 3) return '#ffb74d'; // 3人 - オレンジ
+      if (value <= 4) return '#ff8a65'; // 4人 - 薄い赤
+      return '#e57373';                 // 5人以上 - 赤
     }
   }, [colorMetric]);
 
   // 現在のパスに基づいてデータを取得
   const getCurrentData = useCallback(() => {
+    if (!fullData) return { name: 'root', children: [] };
+    
     let current: FileNode = fullData;
     
     // 現在のパスに基づいて階層をたどる
@@ -222,7 +104,7 @@ export default function CodeHeatmap() {
     }
     
     return current;
-  }, [currentPath]);
+  }, [currentPath, fullData]);
 
   // 現在のデータ
   const currentData = getCurrentData();
@@ -237,7 +119,7 @@ export default function CodeHeatmap() {
         name: node.name,
         loc: node.loc || 0,
         changes: node.changes || 0,
-        bugs: node.bugs || 0,
+        authors: node.authors || 0,
         fill: fillColor,
         hasChildren: false
       }];
@@ -266,7 +148,7 @@ export default function CodeHeatmap() {
           name: child.name,
           loc: totalLoc,
           changes: colorMetric === 'changes' ? totalMetricValue : 0,
-          bugs: colorMetric === 'bugs' ? totalMetricValue : 0,
+          authors: colorMetric === 'authors' ? totalMetricValue : 0,
           fill: fillColor,
           hasChildren: true
         };
@@ -279,7 +161,7 @@ export default function CodeHeatmap() {
         name: child.name,
         loc: child.loc || 0,
         changes: colorMetric === 'changes' ? metricValue : 0,
-        bugs: colorMetric === 'bugs' ? metricValue : 0,
+        authors: colorMetric === 'authors' ? metricValue : 0,
         fill: fillColor,
         hasChildren: false
       };
@@ -342,7 +224,7 @@ export default function CodeHeatmap() {
           <p className="font-bold">{data.name}</p>
           <p className="text-sm">コード行数: {data.loc}</p>
           <p className="text-sm">
-            {colorMetric === 'changes' ? '変更頻度' : 'バグ数'}: {data[colorMetric]}
+            {colorMetric === 'changes' ? '変更回数' : '作者数'}: {data[colorMetric]}
           </p>
           {data.hasChildren && <p className="text-xs italic mt-1">クリックで詳細表示</p>}
         </div>
@@ -388,6 +270,22 @@ export default function CodeHeatmap() {
     );
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-xl">データを読み込み中...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-xl text-red-500">エラー: {error}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col bg-gray-50 p-6 rounded-lg shadow-md">
       <div className="flex justify-between items-center mb-4">
@@ -397,11 +295,11 @@ export default function CodeHeatmap() {
             <label className="mr-2 text-sm font-medium">色指標:</label>
             <select 
               value={colorMetric}
-              onChange={(e) => setColorMetric(e.target.value as 'changes' | 'bugs')}
+              onChange={(e) => setColorMetric(e.target.value as 'changes' | 'authors')}
               className="border rounded px-2 py-1 text-sm"
             >
-              <option value="changes">変更頻度</option>
-              <option value="bugs">バグ数</option>
+              <option value="changes">変更回数</option>
+              <option value="authors">作者数</option>
             </select>
           </div>
         </div>
@@ -443,7 +341,7 @@ export default function CodeHeatmap() {
       
       <p className="mb-4 text-gray-700">
         このヒートマップはモジュールのサイズをコード行数に基づいて、色を
-        {colorMetric === 'changes' ? '変更頻度' : 'バグ数'}
+        {colorMetric === 'changes' ? '変更回数' : '作者数'}
         に基づいて表示しています。モジュールをクリックすると詳細表示します。
         {currentPath.length > 0 && (
           <span className="font-medium ml-1">
@@ -473,46 +371,46 @@ export default function CodeHeatmap() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center">
               <div className="w-4 h-4 bg-green-200 mr-1"></div>
-              <span className="text-sm">低変更頻度 (≤10)</span>
+              <span className="text-sm">低変更回数 (1)</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 bg-green-400 mr-1"></div>
-              <span className="text-sm">中低変更頻度 (≤20)</span>
+              <span className="text-sm">中低変更回数 (2)</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 bg-orange-300 mr-1"></div>
-              <span className="text-sm">中変更頻度 (≤30)</span>
+              <span className="text-sm">中変更回数 (3)</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 bg-red-300 mr-1"></div>
-              <span className="text-sm">中高変更頻度 (≤40)</span>
+              <span className="text-sm">中高変更回数 (4)</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 bg-red-400 mr-1"></div>
-              <span className="text-sm">高変更頻度 (40+)</span>
+              <span className="text-sm">高変更回数 (5+)</span>
             </div>
           </div>
         ) : (
           <div className="flex items-center space-x-4">
             <div className="flex items-center">
               <div className="w-4 h-4 bg-blue-200 mr-1"></div>
-              <span className="text-sm">バグなし (0)</span>
+              <span className="text-sm">1人</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 bg-blue-300 mr-1"></div>
-              <span className="text-sm">少ないバグ (1-2)</span>
+              <span className="text-sm">2人</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 bg-orange-300 mr-1"></div>
-              <span className="text-sm">中程度のバグ (3-4)</span>
+              <span className="text-sm">3人</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 bg-red-300 mr-1"></div>
-              <span className="text-sm">多めのバグ (5-6)</span>
+              <span className="text-sm">4人</span>
             </div>
             <div className="flex items-center">
               <div className="w-4 h-4 bg-red-400 mr-1"></div>
-              <span className="text-sm">多数のバグ (7+)</span>
+              <span className="text-sm">5人以上</span>
             </div>
           </div>
         )}
