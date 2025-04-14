@@ -48,6 +48,11 @@
 # エラーが発生したら即座に終了
 set -e
 
+# デバッグログの出力
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >&2
+}
+
 # 引数チェック
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <target_directory>"
@@ -55,21 +60,29 @@ if [ "$#" -ne 1 ]; then
 fi
 
 TARGET_DIR="$1"
+log "開始: ディレクトリ $TARGET_DIR を分析します"
 
 # ターゲットディレクトリが存在し、Gitリポジトリであることを確認
-if [ ! -d "$TARGET_DIR" ] || [ ! -d "$TARGET_DIR/.git" ]; then
-    echo "Error: $TARGET_DIR is not a valid Git repository"
+if [ ! -d "$TARGET_DIR" ]; then
+    log "エラー: ディレクトリ $TARGET_DIR が存在しません"
+    exit 1
+fi
+
+if [ ! -d "$TARGET_DIR/.git" ]; then
+    log "エラー: $TARGET_DIR はGitリポジトリではありません"
     exit 1
 fi
 
 cd "$TARGET_DIR"
+log "作業ディレクトリを $TARGET_DIR に変更しました"
 
 # 一時ファイルの作成
 TEMP_DIR=$(mktemp -d)
 METRICS_FILE="$TEMP_DIR/metrics.json"
+log "一時ファイルを作成しました: $METRICS_FILE"
 
 # スクリプト終了時に一時ファイルを削除
-trap 'rm -rf "$TEMP_DIR"' EXIT
+trap 'rm -rf "$TEMP_DIR"; log "一時ファイルを削除しました"' EXIT
 
 # JSONの開始
 echo "{" > "$METRICS_FILE"
@@ -78,11 +91,17 @@ echo "  \"children\": [" >> "$METRICS_FILE"
 
 # ディレクトリごとの処理
 first_dir=true
+dir_count=0
+file_count=0
+
 for dir in $(find . -type d -not -path "*/\.*" | sort); do
     # rootディレクトリはスキップ
     if [ "$dir" = "." ]; then
         continue
     fi
+
+    dir_count=$((dir_count + 1))
+    log "ディレクトリを処理中: $dir"
 
     # JSONのカンマ区切り
     if [ "$first_dir" = true ]; then
@@ -106,8 +125,12 @@ for dir in $(find . -type d -not -path "*/\.*" | sort); do
 
         # バイナリファイルはスキップ
         if file "$file" | grep -q "binary"; then
+            log "バイナリファイルをスキップ: $file"
             continue
         fi
+
+        file_count=$((file_count + 1))
+        log "ファイルを処理中: $file"
 
         # JSONのカンマ区切り
         if [ "$first_file" = true ]; then
@@ -118,12 +141,15 @@ for dir in $(find . -type d -not -path "*/\.*" | sort); do
 
         # ファイルの行数を取得
         loc=$(wc -l < "$file")
+        log "  - 行数: $loc"
 
         # Git履歴から変更回数を取得
         changes=$(git log --follow --oneline "$file" | wc -l)
+        log "  - 変更回数: $changes"
 
         # Git履歴から変更したユーザー数を取得
         authors=$(git log --follow --format="%ae" "$file" | sort -u | wc -l)
+        log "  - 変更ユーザー数: $authors"
 
         # ファイル情報の出力
         echo "        {" >> "$METRICS_FILE"
@@ -151,5 +177,8 @@ fi
 echo "  ]" >> "$METRICS_FILE"
 echo "}" >> "$METRICS_FILE"
 
+log "処理完了: $dir_count ディレクトリ、$file_count ファイルを処理しました"
+
 # 整形されたJSONを出力
+log "JSONを出力します"
 cat "$METRICS_FILE" | jq '.'
