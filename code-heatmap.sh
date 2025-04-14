@@ -107,7 +107,7 @@ for dir in $(find . -type d -not -path "*/\.*" | sort); do
         # バイナリファイルはスキップ
         if file "$file" | grep -q "binary"; then
             continue
-        }
+        fi
 
         # JSONのカンマ区切り
         if [ "$first_file" = true ]; then
