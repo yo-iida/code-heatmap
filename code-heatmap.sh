@@ -18,6 +18,7 @@
 # - 隠しファイル（.から始まるファイル）は除外
 # - バイナリファイルは除外
 # - Gitリポジトリである必要がある
+# - .gitignoreで指定されたファイルは除外
 # 
 # 依存関係:
 # - jq: JSONの整形に使用
@@ -79,10 +80,15 @@ log "作業ディレクトリを $TARGET_DIR に変更しました"
 # 一時ファイルの作成
 TEMP_DIR=$(mktemp -d)
 METRICS_FILE="$TEMP_DIR/metrics.json"
+IGNORED_FILES="$TEMP_DIR/ignored.txt"
 log "一時ファイルを作成しました: $METRICS_FILE"
 
 # スクリプト終了時に一時ファイルを削除
 trap 'rm -rf "$TEMP_DIR"; log "一時ファイルを削除しました"' EXIT
+
+# Gitで無視されているファイルのリストを取得
+git ls-files --others --ignored --exclude-standard > "$IGNORED_FILES"
+log "Gitで無視されているファイルのリストを取得しました"
 
 # JSONの開始
 echo "{" > "$METRICS_FILE"
@@ -94,12 +100,8 @@ first_dir=true
 dir_count=0
 file_count=0
 
-for dir in $(find . -type d -not -path "*/\.*" | sort); do
-    # rootディレクトリはスキップ
-    if [ "$dir" = "." ]; then
-        continue
-    fi
-
+# Gitで追跡されているファイルのみを処理
+for dir in $(git ls-files --full-name | xargs -n1 dirname | sort -u); do
     dir_count=$((dir_count + 1))
     log "ディレクトリを処理中: $dir"
 
@@ -112,12 +114,12 @@ for dir in $(find . -type d -not -path "*/\.*" | sort); do
 
     # ディレクトリ情報の出力
     echo "    {" >> "$METRICS_FILE"
-    echo "      \"name\": \"${dir#./}\"," >> "$METRICS_FILE"
+    echo "      \"name\": \"$dir\"," >> "$METRICS_FILE"
     echo "      \"children\": [" >> "$METRICS_FILE"
 
     # ファイルごとの処理
     first_file=true
-    for file in $(find "$dir" -maxdepth 1 -type f -not -path "*/\.*" | sort); do
+    for file in $(git ls-files --full-name "$dir"); do
         # ファイルが存在しない場合はスキップ
         if [ ! -f "$file" ]; then
             continue
