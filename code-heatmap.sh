@@ -134,15 +134,12 @@ for dir in $(git ls-files --full-name | xargs -n1 dirname | sort -u); do
 
         # ファイルの行数を取得
         loc=$(wc -l < "$file")
-        echo "  - 行数: $loc"
 
         # Git履歴から変更回数を取得
         changes=$(git log --follow --oneline "$file" | wc -l)
-        echo "  - 変更回数: $changes"
 
         # Git履歴から変更したユーザー数を取得
         authors=$(git log --follow --format="%ae" "$file" | sort -u | wc -l)
-        echo "  - 変更ユーザー数: $authors"
 
         # ファイル情報の出力
         echo "        {" >> "$METRICS_FILE"
