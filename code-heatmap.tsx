@@ -1,6 +1,39 @@
 import React, { useState, useCallback } from 'react';
-import { Treemap, ResponsiveContainer, Tooltip } from 'recharts';
+import { Treemap, ResponsiveContainer, Tooltip, TooltipProps } from 'recharts';
 import { ArrowLeft } from 'lucide-react';
+
+// データ型の定義
+interface FileNode {
+  name: string;
+  loc?: number;
+  changes?: number;
+  bugs?: number;
+  children?: FileNode[];
+  [key: string]: any; // 動的なプロパティアクセスを許可
+}
+
+interface TreemapNode {
+  name: string;
+  loc: number;
+  changes: number;
+  bugs: number;
+  fill: string;
+  hasChildren: boolean;
+}
+
+interface TreemapContentProps {
+  root: any;
+  depth: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  index: number;
+  colors: string[];
+  name: string;
+  hasChildren: boolean;
+  fill: string;
+}
 
 export default function CodeHeatmap() {
   // より詳細な階層データを用意
@@ -149,11 +182,11 @@ export default function CodeHeatmap() {
   };
 
   // 現在の表示データと階層パスを管理するstate
-  const [currentPath, setCurrentPath] = useState([]);
-  const [colorMetric, setColorMetric] = useState('changes'); // 色付けに使用する指標
+  const [currentPath, setCurrentPath] = useState<string[]>([]);
+  const [colorMetric, setColorMetric] = useState<'changes' | 'bugs'>('changes');
 
   // 指標に基づいて色を決定
-  const getColor = useCallback((value, metric) => {
+  const getColor = useCallback((value: number, metric: string = colorMetric) => {
     const metricToUse = metric || colorMetric;
     
     // 変更頻度に基づく色
@@ -176,7 +209,7 @@ export default function CodeHeatmap() {
 
   // 現在のパスに基づいてデータを取得
   const getCurrentData = useCallback(() => {
-    let current = fullData;
+    let current: FileNode = fullData;
     
     // 現在のパスに基づいて階層をたどる
     for (const segment of currentPath) {
@@ -195,27 +228,28 @@ export default function CodeHeatmap() {
   const currentData = getCurrentData();
 
   // データの処理
-  const prepareData = useCallback((node) => {
+  const prepareData = useCallback((node: FileNode): TreemapNode[] => {
     if (!node.children) {
-      return {
+      const metricValue = node[colorMetric] || 0;
+      const fillColor = getColor(metricValue, colorMetric);
+      if (!fillColor) return [];
+      return [{
         name: node.name,
         loc: node.loc || 0,
-        [colorMetric]: node[colorMetric] || 0,
-        fill: getColor(node[colorMetric] || 0),
+        changes: node.changes || 0,
+        bugs: node.bugs || 0,
+        fill: fillColor,
         hasChildren: false
-      };
+      }];
     }
 
     // 子要素の処理
     const children = node.children.map(child => {
-      // 子要素がさらに子要素を持つ場合
       if (child.children && child.children.length > 0) {
-        // 子要素の合計行数とメトリックの計算
         let totalLoc = 0;
         let totalMetricValue = 0;
         
         child.children.forEach(grandChild => {
-          // 孫要素がさらに子要素を持つ場合は再帰的に計算
           if (grandChild.children && grandChild.children.length > 0) {
             const allDescendants = getAllDescendants(grandChild);
             totalLoc += allDescendants.reduce((sum, d) => sum + (d.loc || 0), 0);
@@ -226,37 +260,44 @@ export default function CodeHeatmap() {
           }
         });
 
+        const fillColor = getColor(totalMetricValue / Math.max(1, child.children.length), colorMetric);
+        if (!fillColor) return null;
         return {
           name: child.name,
           loc: totalLoc,
-          [colorMetric]: totalMetricValue,
-          fill: getColor(totalMetricValue / Math.max(1, child.children.length)),
+          changes: colorMetric === 'changes' ? totalMetricValue : 0,
+          bugs: colorMetric === 'bugs' ? totalMetricValue : 0,
+          fill: fillColor,
           hasChildren: true
         };
       }
       
-      // 子要素が最下層の場合
+      const metricValue = child[colorMetric] || 0;
+      const fillColor = getColor(metricValue, colorMetric);
+      if (!fillColor) return null;
       return {
         name: child.name,
         loc: child.loc || 0,
-        [colorMetric]: child[colorMetric] || 0,
-        fill: getColor(child[colorMetric] || 0),
+        changes: colorMetric === 'changes' ? metricValue : 0,
+        bugs: colorMetric === 'bugs' ? metricValue : 0,
+        fill: fillColor,
         hasChildren: false
       };
-    });
+    }).filter((node): node is TreemapNode => node !== null);
 
     return children;
   }, [colorMetric, getColor]);
 
   // すべての子孫要素を平坦な配列として取得
-  const getAllDescendants = (node) => {
+  const getAllDescendants = (node: FileNode): FileNode[] => {
     if (!node.children) return [node];
     
-    let result = [];
+    let result: FileNode[] = [];
     const stack = [...node.children];
     
     while (stack.length > 0) {
       const current = stack.pop();
+      if (!current) continue;
       
       if (current.children && current.children.length > 0) {
         stack.push(...current.children);
@@ -272,7 +313,8 @@ export default function CodeHeatmap() {
   const displayData = prepareData(currentData);
 
   // ドリルダウン処理
-  const handleDrillDown = useCallback((nodeName) => {
+  const handleDrillDown = useCallback((nodeName: string) => {
+    if (!currentData.children) return;
     const node = currentData.children.find(child => child.name === nodeName);
     if (!node || !node.children) return;
     
@@ -287,12 +329,12 @@ export default function CodeHeatmap() {
   }, [currentPath]);
 
   // 特定の階層に直接移動
-  const navigateToPath = useCallback((index) => {
+  const navigateToPath = useCallback((index: number) => {
     setCurrentPath(currentPath.slice(0, index + 1));
   }, [currentPath]);
 
   // カスタムツールチップの内容
-  const CustomTooltip = ({ active, payload }) => {
+  const CustomTooltip = ({ active, payload }: TooltipProps<any, any>) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
@@ -310,9 +352,9 @@ export default function CodeHeatmap() {
   };
 
   // Treemapのカスタムコンテンツ
-  const CustomizedContent = (props) => {
-    const { root, depth, x, y, width, height, index, colors, name } = props;
-    const isLeaf = !props.hasChildren;
+  const CustomizedContent = (props: TreemapContentProps) => {
+    const { root, depth, x, y, width, height, index, colors, name, hasChildren, fill } = props;
+    const isLeaf = !hasChildren;
     
     return (
       <g>
@@ -322,12 +364,12 @@ export default function CodeHeatmap() {
           width={width}
           height={height}
           style={{
-            fill: props.fill,
+            fill: fill,
             stroke: '#fff',
             strokeWidth: 2,
-            cursor: props.hasChildren ? 'pointer' : 'default'
+            cursor: hasChildren ? 'pointer' : 'default'
           }}
-          onClick={() => props.hasChildren && handleDrillDown(name)}
+          onClick={() => hasChildren && handleDrillDown(name)}
         />
         {width > 50 && height > 30 && (
           <text
@@ -355,7 +397,7 @@ export default function CodeHeatmap() {
             <label className="mr-2 text-sm font-medium">色指標:</label>
             <select 
               value={colorMetric}
-              onChange={(e) => setColorMetric(e.target.value)}
+              onChange={(e) => setColorMetric(e.target.value as 'changes' | 'bugs')}
               className="border rounded px-2 py-1 text-sm"
             >
               <option value="changes">変更頻度</option>
@@ -415,12 +457,12 @@ export default function CodeHeatmap() {
           <Treemap
             data={displayData}
             dataKey="loc"
-            ratio={4/3}
+            aspectRatio={4/3}
             stroke="#fff"
             animationDuration={300}
-            content={<CustomizedContent />}
+            content={<CustomizedContent root={null} depth={0} x={0} y={0} width={0} height={0} index={0} colors={[]} name="" hasChildren={false} fill="" />}
           >
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip active={false} payload={[]} />} />
           </Treemap>
         </ResponsiveContainer>
       </div>
