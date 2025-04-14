@@ -94,6 +94,7 @@ file_count=0
 # Gitで追跡されているファイルのみを処理
 for dir in $(git ls-files --full-name | xargs -n1 dirname | sort -u); do
     dir_count=$((dir_count + 1))
+    echo "ディレクトリを処理中: $dir"
 
     # JSONのカンマ区切り
     if [ "$first_dir" = true ]; then
@@ -117,10 +118,12 @@ for dir in $(git ls-files --full-name | xargs -n1 dirname | sort -u); do
 
         # バイナリファイルはスキップ
         if file "$file" | grep -q "binary"; then
+            echo "バイナリファイルをスキップ: $file"
             continue
         fi
 
         file_count=$((file_count + 1))
+        echo "ファイルを処理中: $file"
 
         # JSONのカンマ区切り
         if [ "$first_file" = true ]; then
@@ -131,12 +134,15 @@ for dir in $(git ls-files --full-name | xargs -n1 dirname | sort -u); do
 
         # ファイルの行数を取得
         loc=$(wc -l < "$file")
+        echo "  - 行数: $loc"
 
         # Git履歴から変更回数を取得
         changes=$(git log --follow --oneline "$file" | wc -l)
+        echo "  - 変更回数: $changes"
 
         # Git履歴から変更したユーザー数を取得
         authors=$(git log --follow --format="%ae" "$file" | sort -u | wc -l)
+        echo "  - 変更ユーザー数: $authors"
 
         # ファイル情報の出力
         echo "        {" >> "$METRICS_FILE"
@@ -163,6 +169,8 @@ fi
 # JSONのルート要素を閉じる
 echo "  ]" >> "$METRICS_FILE"
 echo "}" >> "$METRICS_FILE"
+
+echo "処理完了: $dir_count ディレクトリ、$file_count ファイルを処理しました"
 
 # 整形されたJSONをoutput.jsonに出力
 cat "$METRICS_FILE" | jq '.' > output.json
