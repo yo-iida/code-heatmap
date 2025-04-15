@@ -187,7 +187,10 @@ echo "}" >> "$METRICS_FILE"
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 
-echo "処理完了: $dir_count ディレクトリ、$file_count ファイルを処理しました"
+# 実際のファイル数を計算（ディレクトリ数を除外）
+ACTUAL_FILE_COUNT=$((file_count - dir_count))
+
+echo "処理完了: $dir_count ディレクトリ、$ACTUAL_FILE_COUNT ファイルを処理しました"
 echo "開始時刻: $(date -r $START_TIME '+%Y-%m-%d %H:%M:%S')"
 echo "終了時刻: $(date -r $END_TIME '+%Y-%m-%d %H:%M:%S')"
 echo "所要時間: $DURATION 秒"
