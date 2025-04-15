@@ -2,3 +2,4 @@
 /.next
 /output.json
 .env
+mongodb-keyfile
