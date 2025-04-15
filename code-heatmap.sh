@@ -195,15 +195,17 @@ for dir in $(echo "$GIT_FILES" | xargs -n1 dirname | sort -u); do
         loc=$(grep "^$file " "$LINE_COUNTS" | awk '{print $1}')
 
         # 変更回数を取得
-        changes=$(grep "^$file\t" "$CHANGES_FILE" | cut -f2)
+        changes=$(grep "^$file	" "$CHANGES_FILE" | cut -f2)
         if [ -z "$changes" ]; then
             changes=0
         fi
 
         # ユーザー数を取得
-        authors=$(grep "^$file\t" "$AUTHORS_FILE" | cut -f2 | tr '|' '\n' | sort -u | wc -l)
-        if [ -z "$authors" ]; then
+        authors_line=$(grep "^$file	" "$AUTHORS_FILE" | cut -f2)
+        if [ -z "$authors_line" ]; then
             authors=0
+        else
+            authors=$(echo "$authors_line" | tr '|' '\n' | grep -v '^$' | sort -u | wc -l)
         fi
 
         # ファイル情報の出力
