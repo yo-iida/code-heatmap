@@ -114,23 +114,30 @@ wc -l $(echo "$GIT_FILES") > "$LINE_COUNTS"
 
 # Git履歴から変更回数とユーザー数を集計
 echo "Git履歴を解析中..."
-declare -A changes_count
-declare -A authors_set
-current_commit=""
-current_author=""
+# 変更回数とユーザーのマッピングファイルを作成
+CHANGES_FILE="$TEMP_DIR/changes.txt"
+AUTHORS_FILE="$TEMP_DIR/authors.txt"
 
-while IFS= read -r line; do
-    if [[ $line =~ ^COMMIT\ ([^\ ]+)\ (.+)$ ]]; then
-        current_commit="${BASH_REMATCH[1]}"
-        current_author="${BASH_REMATCH[2]}"
-    elif [[ -n $line ]]; then
-        # ファイルパスの場合
-        if [[ -f "$line" ]]; then
-            ((changes_count[$line]++))
-            authors_set[$line]="${authors_set[$line]}|$current_author"
-        fi
-    fi
-done < "$GIT_LOG_FILE"
+awk '
+    BEGIN { last_commit = ""; last_author = ""; }
+    /^COMMIT/ {
+        last_commit = $2;
+        last_author = $3;
+        next;
+    }
+    NF > 0 {
+        if (last_commit != "" && last_author != "") {
+            changes[$0]++;
+            authors[$0] = authors[$0] "|" last_author;
+        }
+    }
+    END {
+        for (file in changes) {
+            print file "\t" changes[file] > "'$CHANGES_FILE'";
+            print file "\t" authors[file] > "'$AUTHORS_FILE'";
+        }
+    }
+' "$GIT_LOG_FILE"
 
 # JSONの開始
 echo "JSONファイルの初期化..."
@@ -188,10 +195,16 @@ for dir in $(echo "$GIT_FILES" | xargs -n1 dirname | sort -u); do
         loc=$(grep "^$file " "$LINE_COUNTS" | awk '{print $1}')
 
         # 変更回数を取得
-        changes=${changes_count[$file]:-0}
+        changes=$(grep "^$file\t" "$CHANGES_FILE" | cut -f2)
+        if [ -z "$changes" ]; then
+            changes=0
+        fi
 
         # ユーザー数を取得
-        authors=$(echo "${authors_set[$file]}" | tr '|' '\n' | sort -u | wc -l)
+        authors=$(grep "^$file\t" "$AUTHORS_FILE" | cut -f2 | tr '|' '\n' | sort -u | wc -l)
+        if [ -z "$authors" ]; then
+            authors=0
+        fi
 
         # ファイル情報の出力
         echo "        {" >> "$METRICS_FILE"
