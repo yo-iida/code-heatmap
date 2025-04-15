@@ -106,11 +106,19 @@ git log --name-only --format="COMMIT %H %ae" > "$GIT_LOG_FILE"
 
 # 全ファイルのタイプを一括チェック
 echo "ファイルタイプをチェック中..."
-file $(echo "$GIT_FILES") > "$FILE_TYPES"
+while IFS= read -r file; do
+    if [ -f "$file" ]; then
+        file "$file" >> "$FILE_TYPES"
+    fi
+done <<< "$GIT_FILES"
 
 # 全ファイルの行数を一括カウント
 echo "ファイルの行数をカウント中..."
-wc -l $(echo "$GIT_FILES") > "$LINE_COUNTS"
+while IFS= read -r file; do
+    if [ -f "$file" ]; then
+        wc -l "$file" >> "$LINE_COUNTS"
+    fi
+done <<< "$GIT_FILES"
 
 # Git履歴から変更回数とユーザー数を集計
 echo "Git履歴を解析中..."
