@@ -101,9 +101,14 @@ dir_count=0
 file_count=0
 
 # Gitで追跡されているファイルのみを処理
-for dir in $(git ls-files --full-name | xargs -n1 dirname | sort -u); do
+echo "Git管理されているファイルの一覧を取得中..."
+GIT_FILES=$(git ls-files --full-name)
+TOTAL_FILES=$(echo "$GIT_FILES" | wc -l)
+echo "トータル処理件数: $TOTAL_FILES ファイル"
+
+for dir in $(echo "$GIT_FILES" | xargs -n1 dirname | sort -u); do
     dir_count=$((dir_count + 1))
-    echo "ディレクトリを処理中: $dir"
+    echo "ディレクトリを処理中: $dir ($dir_count/$TOTAL_FILES)"
 
     # JSONのカンマ区切り
     if [ "$first_dir" = true ]; then
@@ -133,7 +138,7 @@ for dir in $(git ls-files --full-name | xargs -n1 dirname | sort -u); do
         fi
 
         file_count=$((file_count + 1))
-        echo "ファイルを処理中: $file"
+        echo "ファイルを処理中: $file ($file_count/$TOTAL_FILES)"
 
         # JSONのカンマ区切り
         if [ "$first_file" = true ]; then
