@@ -1,0 +1,38 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Repository {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  path      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  files     File[]
+}
+
+model File {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  path         String
+  name         String
+  loc          Int
+  changes      Int
+  authors      Int
+  repository   Repository @relation(fields: [repositoryId], references: [id])
+  repositoryId String     @db.ObjectId
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([path, repositoryId])
+}

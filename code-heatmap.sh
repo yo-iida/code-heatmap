@@ -54,22 +54,34 @@ set -e
 START_TIME=$(date +%s)
 echo "処理開始: $(date '+%Y-%m-%d %H:%M:%S')"
 
-# 引数チェック
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <target_directory>"
+# ファイルパスを正規化する関数
+normalize_path() {
+    local path="$1"
+    # 相対パスを絶対パスに変換
+    if [[ ! "$path" = /* ]]; then
+        path="$PWD/$path"
+    fi
+    # パスの正規化（重複するスラッシュの削除、./ や ../ の解決）
+    python3 -c "import os.path; print(os.path.normpath('$path'))"
+}
+
+# ファイルパスの比較用に正規化されたターゲットディレクトリを設定
+TARGET_DIR=$(normalize_path "$1")
+
+# 入力チェック
+if [ -z "$TARGET_DIR" ]; then
+    echo "エラー: ターゲットディレクトリが指定されていません"
     exit 1
 fi
 
-TARGET_DIR="$1"
-
-# ターゲットディレクトリが存在し、Gitリポジトリであることを確認
 if [ ! -d "$TARGET_DIR" ]; then
-    echo "エラー: ディレクトリ $TARGET_DIR が存在しません"
+    echo "エラー: 指定されたパス '$TARGET_DIR' はディレクトリではありません"
     exit 1
 fi
 
-if [ ! -d "$TARGET_DIR/.git" ]; then
-    echo "エラー: $TARGET_DIR はGitリポジトリではありません"
+# Gitリポジトリのチェック
+if ! git -C "$TARGET_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "エラー: 指定されたディレクトリ '$TARGET_DIR' はGitリポジトリではありません"
     exit 1
 fi
 
@@ -158,92 +170,102 @@ first_dir=true
 dir_count=0
 file_count=0
 
+# ファイルの行数を取得する関数
+get_loc() {
+    local file="$1"
+    local count
+    if ! count=$(wc -l < "$file" 2>/dev/null); then
+        echo "0"
+        return
+    fi
+    echo "$count"
+}
+
+# 変更回数を取得する関数
+get_changes() {
+    local file="$1"
+    local count
+    count=$(grep -F "$file" "$CHANGES_FILE" 2>/dev/null | cut -f2 || echo "0")
+    echo "${count:-0}"
+}
+
+# 作者数を取得する関数
+get_authors() {
+    local file="$1"
+    local authors
+    authors=$(grep -F "$file" "$AUTHORS_FILE" 2>/dev/null | cut -f2 | tr '|' '\n' | sort -u | wc -l || echo "0")
+    echo "${authors:-0}"
+}
+
 for dir in $(echo "$GIT_FILES" | xargs -n1 dirname | sort -u); do
-    dir_count=$((dir_count + 1))
+    ((dir_count++))
     echo "ディレクトリを処理中: $dir ($dir_count/$TOTAL_DIRS)"
 
-    # JSONのカンマ区切り
     if [ "$first_dir" = true ]; then
         first_dir=false
     else
         echo "    }," >> "$METRICS_FILE"
     fi
 
-    # ディレクトリ情報の出力
     echo "    {" >> "$METRICS_FILE"
     echo "      \"name\": \"$dir\"," >> "$METRICS_FILE"
     echo "      \"children\": [" >> "$METRICS_FILE"
 
-    # ファイルごとの処理
     first_file=true
+    has_files=false
+
     for file in $(git ls-files --full-name "$dir"); do
-        # ファイルが存在しない場合はスキップ
         if [ ! -f "$file" ]; then
-            echo "警告: ファイルが存在しません: $file"
+            echo "警告: ファイルが見つかりません: $file"
             continue
         fi
 
-        # バイナリファイルはスキップ
-        if grep -q "binary" <<< "$(grep "^$file:" "$FILE_TYPES")"; then
-            echo "バイナリファイルをスキップ: $file"
+        if grep -q "binary" <(file "$file" 2>/dev/null); then
+            echo "警告: バイナリファイルをスキップします: $file"
             continue
         fi
 
-        file_count=$((file_count + 1))
+        ((file_count++))
         echo "ファイルを処理中: $file ($file_count/$TOTAL_FILES)"
 
-        # JSONのカンマ区切り
         if [ "$first_file" = true ]; then
             first_file=false
         else
             echo "        }," >> "$METRICS_FILE"
         fi
 
-        # ファイルの行数を取得
-        loc_line=$(grep " $file$" "$LINE_COUNTS")
-        if [ -z "$loc_line" ]; then
-            loc=0
-        else
-            loc=$(echo "$loc_line" | awk '{print $1}')
+        normalized_file=$(normalize_path "$file")
+        if [[ ! -f "$normalized_file" ]]; then
+            echo "警告: 正規化されたパスが見つかりません: $normalized_file"
+            continue
         fi
 
-        # 変更回数を取得
-        changes=$(grep "^$file	" "$CHANGES_FILE" | cut -f2)
-        if [ -z "$changes" ]; then
-            changes=0
+        if [[ "$normalized_file" == */.* ]] || [[ "$normalized_file" == */node_modules/* ]]; then
+            echo "警告: 無視するファイル: $normalized_file"
+            continue
         fi
 
-        # ユーザー数を取得
-        authors_line=$(grep "^$file	" "$AUTHORS_FILE" | cut -f2)
-        if [ -z "$authors_line" ]; then
-            authors=0
-        else
-            authors=$(echo "$authors_line" | tr '|' '\n' | grep -v '^$' | sort -u | wc -l)
-        fi
+        has_files=true
+        loc=$(get_loc "$normalized_file")
+        changes=$(get_changes "$file")
+        authors=$(get_authors "$file")
 
-        # ファイル情報の出力
         echo "        {" >> "$METRICS_FILE"
-        echo "          \"name\": \"${file#$dir/}\"," >> "$METRICS_FILE"
+        echo "          \"name\": \"$(basename "$file")\"," >> "$METRICS_FILE"
         echo "          \"loc\": $loc," >> "$METRICS_FILE"
         echo "          \"changes\": $changes," >> "$METRICS_FILE"
         echo "          \"authors\": $authors" >> "$METRICS_FILE"
     done
 
-    # ディレクトリ内のファイルがある場合は最後のファイルのJSONを閉じる
-    if [ "$first_file" = false ]; then
+    if [ "$has_files" = true ]; then
         echo "        }" >> "$METRICS_FILE"
     fi
-
-    # ディレクトリの子要素（ファイル）リストを閉じる
     echo "      ]" >> "$METRICS_FILE"
 done
 
-# 最後のディレクトリのJSONを閉じる
-if [ "$first_dir" = false ]; then
+if [ "$dir_count" -gt 0 ]; then
     echo "    }" >> "$METRICS_FILE"
 fi
-
-# JSONのルート要素を閉じる
 echo "  ]" >> "$METRICS_FILE"
 echo "}" >> "$METRICS_FILE"
 
