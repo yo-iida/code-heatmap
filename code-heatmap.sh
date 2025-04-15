@@ -49,6 +49,10 @@
 # エラーが発生したら即座に終了
 set -e
 
+# 開始時刻を記録
+START_TIME=$(date +%s)
+echo "処理開始: $(date '+%Y-%m-%d %H:%M:%S')"
+
 # 引数チェック
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <target_directory>"
@@ -69,19 +73,24 @@ if [ ! -d "$TARGET_DIR/.git" ]; then
 fi
 
 cd "$TARGET_DIR"
+echo "作業ディレクトリ: $(pwd)"
 
 # 一時ファイルの作成
 TEMP_DIR=$(mktemp -d)
 METRICS_FILE="$TEMP_DIR/metrics.json"
 IGNORED_FILES="$TEMP_DIR/ignored.txt"
 
+echo "一時ディレクトリ: $TEMP_DIR"
+
 # スクリプト終了時に一時ファイルを削除
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # Gitで無視されているファイルのリストを取得
+echo "Gitで無視されているファイルのリストを取得中..."
 git ls-files --others --ignored --exclude-standard > "$IGNORED_FILES"
 
 # JSONの開始
+echo "JSONファイルの初期化..."
 echo "{" > "$METRICS_FILE"
 echo "  \"name\": \"root\"," >> "$METRICS_FILE"
 echo "  \"children\": [" >> "$METRICS_FILE"
@@ -113,6 +122,7 @@ for dir in $(git ls-files --full-name | xargs -n1 dirname | sort -u); do
     for file in $(git ls-files --full-name "$dir"); do
         # ファイルが存在しない場合はスキップ
         if [ ! -f "$file" ]; then
+            echo "警告: ファイルが存在しません: $file"
             continue
         fi
 
@@ -167,7 +177,16 @@ fi
 echo "  ]" >> "$METRICS_FILE"
 echo "}" >> "$METRICS_FILE"
 
+# 終了時刻を記録
+END_TIME=$(date +%s)
+DURATION=$((END_TIME - START_TIME))
+
 echo "処理完了: $dir_count ディレクトリ、$file_count ファイルを処理しました"
+echo "開始時刻: $(date -r $START_TIME '+%Y-%m-%d %H:%M:%S')"
+echo "終了時刻: $(date -r $END_TIME '+%Y-%m-%d %H:%M:%S')"
+echo "所要時間: $DURATION 秒"
 
 # 整形されたJSONをoutput.jsonに出力
+echo "JSONファイルを出力中..."
 cat "$METRICS_FILE" | jq '.' > output.json
+echo "出力完了: output.json"
