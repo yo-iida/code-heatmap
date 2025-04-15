@@ -35,7 +35,17 @@ interface TreemapContentProps {
   fill: string;
 }
 
-export default function CodeHeatmap() {
+interface Repository {
+  id: string;
+  name: string;
+  url: string;
+}
+
+interface CodeHeatmapProps {
+  data: Repository;
+}
+
+export default function CodeHeatmap({ data }: CodeHeatmapProps) {
   // データの読み込み状態を管理
   const [fullData, setFullData] = useState<FileNode | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,12 +55,12 @@ export default function CodeHeatmap() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('/output.json');
+        const response = await fetch(`/api/repositories/${data.id}/output.json`);
         if (!response.ok) {
           throw new Error('データの読み込みに失敗しました');
         }
-        const data = await response.json();
-        setFullData(data);
+        const jsonData = await response.json();
+        setFullData(jsonData);
       } catch (err) {
         setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
       } finally {
@@ -59,7 +69,7 @@ export default function CodeHeatmap() {
     };
 
     fetchData();
-  }, []);
+  }, [data.id]);
 
   // 現在の表示データと階層パスを管理するstate
   const [currentPath, setCurrentPath] = useState<string[]>([]);
