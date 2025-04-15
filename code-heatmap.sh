@@ -192,7 +192,12 @@ for dir in $(echo "$GIT_FILES" | xargs -n1 dirname | sort -u); do
         fi
 
         # ファイルの行数を取得
-        loc=$(grep "^$file " "$LINE_COUNTS" | awk '{print $1}')
+        loc_line=$(grep " $file$" "$LINE_COUNTS")
+        if [ -z "$loc_line" ]; then
+            loc=0
+        else
+            loc=$(echo "$loc_line" | awk '{print $1}')
+        fi
 
         # 変更回数を取得
         changes=$(grep "^$file	" "$CHANGES_FILE" | cut -f2)
