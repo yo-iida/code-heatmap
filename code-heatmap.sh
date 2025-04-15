@@ -23,6 +23,7 @@
 # 依存関係:
 # - jq: JSONの整形に使用
 # - git: リポジトリの分析に使用
+# - awk: データ処理に使用
 # 
 # 使用方法:
 #   ./code-heatmap.sh /path/to/git/repository
@@ -79,6 +80,9 @@ echo "作業ディレクトリ: $(pwd)"
 TEMP_DIR=$(mktemp -d)
 METRICS_FILE="$TEMP_DIR/metrics.json"
 IGNORED_FILES="$TEMP_DIR/ignored.txt"
+GIT_LOG_FILE="$TEMP_DIR/git_log.txt"
+FILE_TYPES="$TEMP_DIR/file_types.txt"
+LINE_COUNTS="$TEMP_DIR/line_counts.txt"
 
 echo "一時ディレクトリ: $TEMP_DIR"
 
@@ -88,6 +92,45 @@ trap 'rm -rf "$TEMP_DIR"' EXIT
 # Gitで無視されているファイルのリストを取得
 echo "Gitで無視されているファイルのリストを取得中..."
 git ls-files --others --ignored --exclude-standard > "$IGNORED_FILES"
+
+# Git管理されているファイルの一覧を取得
+echo "Git管理されているファイルの一覧を取得中..."
+GIT_FILES=$(git ls-files --full-name)
+TOTAL_FILES=$(echo "$GIT_FILES" | wc -l)
+TOTAL_DIRS=$(echo "$GIT_FILES" | xargs -n1 dirname | sort -u | wc -l)
+echo "トータル処理件数: $TOTAL_FILES ファイル、$TOTAL_DIRS ディレクトリ"
+
+# 全ファイルのGit履歴を一括取得
+echo "Git履歴を取得中..."
+git log --name-only --format="COMMIT %H %ae" > "$GIT_LOG_FILE"
+
+# 全ファイルのタイプを一括チェック
+echo "ファイルタイプをチェック中..."
+file $(echo "$GIT_FILES") > "$FILE_TYPES"
+
+# 全ファイルの行数を一括カウント
+echo "ファイルの行数をカウント中..."
+wc -l $(echo "$GIT_FILES") > "$LINE_COUNTS"
+
+# Git履歴から変更回数とユーザー数を集計
+echo "Git履歴を解析中..."
+declare -A changes_count
+declare -A authors_set
+current_commit=""
+current_author=""
+
+while IFS= read -r line; do
+    if [[ $line =~ ^COMMIT\ ([^\ ]+)\ (.+)$ ]]; then
+        current_commit="${BASH_REMATCH[1]}"
+        current_author="${BASH_REMATCH[2]}"
+    elif [[ -n $line ]]; then
+        # ファイルパスの場合
+        if [[ -f "$line" ]]; then
+            ((changes_count[$line]++))
+            authors_set[$line]="${authors_set[$line]}|$current_author"
+        fi
+    fi
+done < "$GIT_LOG_FILE"
 
 # JSONの開始
 echo "JSONファイルの初期化..."
@@ -99,13 +142,6 @@ echo "  \"children\": [" >> "$METRICS_FILE"
 first_dir=true
 dir_count=0
 file_count=0
-
-# Gitで追跡されているファイルのみを処理
-echo "Git管理されているファイルの一覧を取得中..."
-GIT_FILES=$(git ls-files --full-name)
-TOTAL_FILES=$(echo "$GIT_FILES" | wc -l)
-TOTAL_DIRS=$(echo "$GIT_FILES" | xargs -n1 dirname | sort -u | wc -l)
-echo "トータル処理件数: $TOTAL_FILES ファイル、$TOTAL_DIRS ディレクトリ"
 
 for dir in $(echo "$GIT_FILES" | xargs -n1 dirname | sort -u); do
     dir_count=$((dir_count + 1))
@@ -133,7 +169,7 @@ for dir in $(echo "$GIT_FILES" | xargs -n1 dirname | sort -u); do
         fi
 
         # バイナリファイルはスキップ
-        if file "$file" | grep -q "binary"; then
+        if grep -q "binary" <<< "$(grep "^$file:" "$FILE_TYPES")"; then
             echo "バイナリファイルをスキップ: $file"
             continue
         fi
@@ -149,13 +185,13 @@ for dir in $(echo "$GIT_FILES" | xargs -n1 dirname | sort -u); do
         fi
 
         # ファイルの行数を取得
-        loc=$(wc -l < "$file")
+        loc=$(grep "^$file " "$LINE_COUNTS" | awk '{print $1}')
 
-        # Git履歴から変更回数を取得
-        changes=$(git log --follow --oneline "$file" | wc -l)
+        # 変更回数を取得
+        changes=${changes_count[$file]:-0}
 
-        # Git履歴から変更したユーザー数を取得
-        authors=$(git log --follow --format="%ae" "$file" | sort -u | wc -l)
+        # ユーザー数を取得
+        authors=$(echo "${authors_set[$file]}" | tr '|' '\n' | sort -u | wc -l)
 
         # ファイル情報の出力
         echo "        {" >> "$METRICS_FILE"
